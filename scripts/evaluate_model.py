@@ -381,7 +381,7 @@ def section2_scoring_eval(static_only=False):
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    BASE_MODEL  = "Qwen/Qwen1.5-1.8B"
+    BASE_MODEL  = "Qwen/Qwen1.5-1.8B-Chat"
     MODEL_PATH  = str(ROOT / "models" / "fine_tuned_interviewer")
 
     tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)

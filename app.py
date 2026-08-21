@@ -7,7 +7,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 # 1. Initialization & Setup
 # =============================================================================
 MODEL_PATH = "./models/fine_tuned_interviewer"
-BASE_MODEL = "Qwen/Qwen1.5-1.8B"
+BASE_MODEL = "Qwen/Qwen1.5-1.8B-Chat"
 
 print("Loading fine-tuned model... please wait.")
 tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
