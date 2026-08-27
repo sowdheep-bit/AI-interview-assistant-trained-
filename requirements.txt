@@ -2,8 +2,11 @@ torch
 transformers>=4.40.0
 peft>=0.10.0
 pandas
+matplotlib
+seaborn
 accelerate
 sentencepiece
 protobuf
 datasets
+trl>=0.12.0
 huggingface_hub

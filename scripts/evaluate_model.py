@@ -371,7 +371,7 @@ GOLD_STANDARD = [
 ]
 
 
-def section2_scoring_eval(static_only=False):
+def section2_scoring_eval(static_only=False, adapter_path=None):
     """Run gold-standard scoring evaluation."""
     if static_only:
         print("[2/3] Skipped (--static-only flag)")
@@ -380,15 +380,18 @@ def section2_scoring_eval(static_only=False):
     print("[2/3] Loading model for scoring evaluation ...")
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
+    from peft import PeftConfig, PeftModel
 
-    BASE_MODEL  = "Qwen/Qwen1.5-1.8B-Chat"
-    MODEL_PATH  = str(ROOT / "models" / "fine_tuned_interviewer")
+    MODEL_PATH  = str(adapter_path or ROOT / "models" / "fine_tuned_interviewer")
+    # Loading the adapter on Qwen's Chat checkpoint when it was trained on the
+    # base checkpoint invalidates the score. Read the base from its metadata.
+    BASE_MODEL = PeftConfig.from_pretrained(MODEL_PATH).base_model_name_or_path
 
     tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
     model     = AutoModelForCausalLM.from_pretrained(
-        BASE_MODEL, device_map="cpu", dtype=torch.float32
+        BASE_MODEL, device_map="cpu", torch_dtype=torch.float32
     )
-    model.load_adapter(MODEL_PATH)
+    model = PeftModel.from_pretrained(model, MODEL_PATH)
     model.eval()
 
     TIER_EXPECTED = {"P": 9, "M": 5.5, "W": 1}
@@ -426,14 +429,17 @@ def section2_scoring_eval(static_only=False):
 )
         inputs = tokenizer(prompt, return_tensors="pt")
         with torch.no_grad():
-            outputs = model.generate(**inputs, max_new_tokens=5,
-                                     do_sample=False, temperature=0.0)
+            outputs = model.generate(**inputs, max_new_tokens=4,
+                                     do_sample=False,
+                                     pad_token_id=tokenizer.eos_token_id,
+                                     eos_token_id=tokenizer.eos_token_id)
         resp = tokenizer.decode(outputs[0][inputs.input_ids.shape[1]:],
                                 skip_special_tokens=True).strip()
         nums = re.findall(r"\b\d+\b", resp)
         if nums:
             return min(max(int(nums[0]), 0), 10)
-        return 7 if len(clean.split()) > 5 else 0
+        # An unparseable answer is not evidence of a passing response.
+        return 0
 
     results = []
     print("    Running 30 gold-standard cases ...")
@@ -1031,6 +1037,8 @@ def main():
     parser = argparse.ArgumentParser(description="Model Performance Evaluation Report")
     parser.add_argument("--static-only", action="store_true",
                         help="Skip model loading; only generate dataset/architecture charts")
+    parser.add_argument("--adapter-path", type=Path,
+                        help="Adapter to benchmark (default: models/fine_tuned_interviewer)")
     args = parser.parse_args()
 
     print("=" * 55)
@@ -1042,7 +1050,9 @@ def main():
     dataset_stats = section1_dataset(df)
     arch          = section1_architecture()
     training      = section1_training()
-    scoring       = section2_scoring_eval(static_only=args.static_only)
+    scoring       = section2_scoring_eval(
+        static_only=args.static_only, adapter_path=args.adapter_path
+    )
     justification = section3_justification()
 
     print("\nGenerating HTML report ...")

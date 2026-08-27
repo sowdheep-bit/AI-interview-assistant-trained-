@@ -201,3 +201,39 @@ python app.py
 | `sentencepiece` | Tokenizer backend for Qwen |
 | `datasets` | HuggingFace datasets utility |
 | `huggingface_hub` | Model download from HuggingFace |
+
+---
+
+## Improving grader accuracy
+
+The original 63.3% figure is a 30-case tier-classification benchmark, not
+interview-answer accuracy in general. The application and evaluator now load
+the adapter on the base model recorded in its metadata and use the same
+`Score:` prompt used in fine-tuning. Those fixes must be benchmarked before
+claiming an improved percentage.
+
+The checked-in grading set currently contains only 126 answers from 42 unique
+questions, concentrated in Data Structures & Algorithms. Generate a balanced,
+question-level dataset before retraining; do not use the 30 benchmark questions
+as training data.
+
+```powershell
+# Requires GEMINI_API_KEY. --resume preserves the existing examples.
+python scripts/generate_grading_dataset.py --n-per-cell 100 --resume
+
+# Validation is split by question, so reference answers cannot leak between
+# train and validation answer variants.
+python scripts/train_grading_lora.py --epochs 4 --rank 32
+
+# Benchmark the new adapter on the held-out 30-case suite.
+python scripts/evaluate_model.py --adapter-path models/fine_tuned_interviewer_v2
+```
+
+Only promote a new adapter after it reaches the target on the benchmark and a
+small, independently human-labelled test set. To try it without replacing the
+current adapter:
+
+```powershell
+$env:INTERVIEW_ADAPTER_PATH = "./models/fine_tuned_interviewer_v2"
+python app.py
+```

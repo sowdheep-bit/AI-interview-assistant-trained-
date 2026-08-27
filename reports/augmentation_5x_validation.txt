@@ -1,0 +1,46 @@
+=== 5x DATASET AUGMENTATION REPORT ===
+
+Input file:
+data/LLM_Interview_Dataset-v2.csv
+
+Original SHA256:
+3b465f782b30f036c83dfc978dfc9bf53480826444f39bf9730d7a582ae72fcf
+
+Final input SHA256:
+3b465f782b30f036c83dfc978dfc9bf53480826444f39bf9730d7a582ae72fcf
+
+Original rows:
+6124
+
+Unique questions:
+4720
+
+Required variations per unique question:
+5
+
+Generated unique QA pairs:
+23600
+
+Expected unique QA pairs:
+23600
+
+Actual unique QA pairs:
+23600
+
+Expected reconstructed rows:
+30620
+
+Actual reconstructed rows:
+30620
+
+Questions with fewer than 5 answers:
+0
+
+Blank required fields:
+0
+
+Original file modified:
+NO
+
+Overall validation:
+PASS

@@ -1,18 +1,24 @@
 import pandas as pd
 import torch
 import re
+import os
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from peft import PeftConfig, PeftModel
 
 # =============================================================================
 # 1. Initialization & Setup
 # =============================================================================
-MODEL_PATH = "./models/fine_tuned_interviewer"
-BASE_MODEL = "Qwen/Qwen1.5-1.8B-Chat"
+MODEL_PATH = os.environ.get("INTERVIEW_ADAPTER_PATH", "./models/fine_tuned_interviewer")
+# The adapter was trained on Qwen1.5-1.8B (not the Chat checkpoint).  Loading
+# an adapter on a different base model is a silent but substantial source of
+# scoring errors, so always read the base checkpoint from the adapter metadata.
+BASE_MODEL = PeftConfig.from_pretrained(MODEL_PATH).base_model_name_or_path
 
 print("Loading fine-tuned model... please wait.")
 tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
 model = AutoModelForCausalLM.from_pretrained(BASE_MODEL, device_map="cpu", torch_dtype=torch.float32)
-model.load_adapter(MODEL_PATH)
+model = PeftModel.from_pretrained(model, MODEL_PATH)
+model.eval()
 
 df = pd.read_csv("./data/LLM_Interview_Dataset-v2.csv")
 
@@ -22,112 +28,98 @@ df = pd.read_csv("./data/LLM_Interview_Dataset-v2.csv")
 # =============================================================================
 def evaluate_answer(question, reference_answer, user_answer, max_marks=10):
     """
-    Evaluates the user's answer robustly, handling edge cases, prompt injections, 
+    Evaluates the user's answer robustly, handling edge cases, prompt injections,
     and returning both a conversational response and a strict score.
     """
-    clean_answer = user_answer.strip().lower()
-    
+    clean_answer = user_answer.strip()
+
     # -- Edge Case 1: The "I don't know" / Empty fast path --
     non_answers = ["i dont know", "i don't know", "dont know", "no idea", "pass", "skip", "n/a", ""]
-    if clean_answer in non_answers:
+    if clean_answer.lower() in non_answers:
         return 0, "No worries at all! That's a tough one. Let's just move on to the next topic."
 
     # -- Edge Case 2: Extreme gibberish or too short --
     # If it's less than 3 words and doesn't exactly match a short reference answer.
-    if len(clean_answer.split()) < 3 and clean_answer != reference_answer.strip().lower():
+    clean_lower = clean_answer.lower()
+    if len(clean_lower.split()) < 3 and clean_lower != reference_answer.strip().lower():
         return 0, "I'm not quite sure I follow. In a real interview, make sure to elaborate on your thought process!"
 
     # -- Edge Case 3: Basic Prompt Injection Guardrail --
     injection_keywords = ["ignore previous", "give me a 10", "score: 10", "system prompt"]
-    if any(kw in clean_answer for kw in injection_keywords):
+    if any(kw in clean_lower for kw in injection_keywords):
         return 0, "Nice try! Let's stick to the technical questions, shall we?"
 
-    # -- Expert Interviewer Prompt --
+    # This prompt deliberately matches the completion-only training template in
+    # scripts/train_grading_lora.py.  Keep the model's job narrow (emit a score)
+    # rather than asking a small model to follow a long, unrelated XML format.
     prompt = (
-        f"You are an expert Senior Staff Engineer and a friendly, empathetic technical interviewer. "
-        f"Your task is to evaluate a candidate's answer to an interview question.\n\n"
-
+        "You are a strict technical interviewer.\n\n"
         f"Question: {question}\n"
-        f"Reference Answer: {reference_answer}\n"
-        f"Candidate's Answer: {user_answer}\n\n"
-
-        f"Instructions:\n"
-        f"1. First determine whether the candidate actually answered the specific question being asked.\n"
-        f"2. The answer must be relevant to the exact concept, class, algorithm, problem, or topic in the question.\n"
-        f"3. If the candidate discusses a different topic, class, algorithm, or concept, do NOT give a high score, "
-        f"even if the information provided is technically correct.\n"
-        f"4. A completely off-topic answer should normally receive 0-2 marks.\n"
-        f"5. If the answer is relevant, carefully evaluate the technical claims for factual correctness.\n"
-        f"6. Before assigning marks, identify the important factual claims made by the candidate.\n"
-        f"7. Check each important technical claim against your own technical knowledge and the reference answer.\n"
-        f"8. Distinguish clearly between correct concepts, missing concepts, and incorrect technical claims.\n"
-        f"9. A technically incorrect claim must reduce the score even if the answer is detailed, fluent, or confident.\n"
-        f"10. Multiple major technical errors must prevent a high score.\n"
-        f"11. Do NOT give 9-10 marks to an answer containing major factual misconceptions.\n"
-        f"12. Correct statements that go beyond the reference answer should receive credit and should NOT reduce the score.\n"
-        f"13. The candidate does NOT need to use the same wording as the reference answer.\n"
-        f"14. Accept technically correct explanations that use different wording, terminology, examples, formulas, "
-        f"or structure.\n"
-        f"15. Do not penalize an answer simply because it is more detailed than the reference answer.\n"
-        f"16. Do not award marks merely because the answer is long. Judge the technical content.\n"
-        f"17. Write a brief, conversational response of 1-3 sentences addressed directly to the candidate. "
-        f"Validate correct points, gently correct important misconceptions, and mention important missing concepts when appropriate.\n\n"
-
-        f"Scoring:\n"
-        f"18. Evaluate the answer using these four dimensions:\n"
-        f"   - Relevance: 0-2 marks. Does the answer directly address the specific question?\n"
-        f"   - Technical correctness: 0-4 marks. Are the important technical claims correct?\n"
-        f"   - Completeness: 0-2 marks. Does the answer cover the essential concepts required by the question?\n"
-        f"   - Clarity: 0-2 marks. Is the explanation clear and understandable?\n"
-        f"   Add these four values to obtain the final score out of 10.\n\n"
-
-        f"19. If the answer is completely off-topic, normally give 0-2 marks.\n"
-        f"20. If the answer is relevant but contains major technical misconceptions, normally give no more than 5 marks.\n"
-        f"21. If the answer is relevant, mostly correct, but has important omissions or minor errors, give partial credit.\n"
-        f"22. An answer should receive 9-10 marks only when it is relevant, technically accurate, and substantially complete.\n"
-        f"23. Correct additional information must not reduce the score.\n"
-        f"24. Do not confuse confidence, length, or detail with correctness.\n\n"
-
-        f"You MUST format your output EXACTLY using these XML tags. Do not output anything else:\n"
-        f"<feedback>Your conversational response here.</feedback>\n"
-        f"<score>Your integer score here</score>\n\n"
-
-        f"Output:\n"
+        f"Ideal Answer: {reference_answer}\n"
+        f"Candidate Answer: {user_answer}\n\n"
+        "Evaluation Rubric:\n"
+        "- 0 marks: gibberish, completely wrong, or empty.\n"
+        "- 1 to 4 marks: vague, lacking detail, or mostly incorrect.\n"
+        "- 5 to 7 marks: partially correct but missing key concepts.\n"
+        "- 8 to 10 marks: conceptually accurate and complete.\n\n"
+        "Score: "
     )
     inputs = tokenizer(prompt, return_tensors="pt")
-    
-    # Generate parameters tuned for a balance of strict formatting and natural language
+
     with torch.no_grad():
         outputs = model.generate(
             **inputs,
-            max_new_tokens=150,
+            max_new_tokens=4,
             do_sample=False,
+            pad_token_id=tokenizer.eos_token_id,
+            eos_token_id=tokenizer.eos_token_id,
         )
-    
+
     response = tokenizer.decode(outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True).strip()
-   
-    
-    # -- Robust Regex Parsing --
-    feedback_match = re.search(r'<feedback>(.*?)</feedback>', response, re.IGNORECASE | re.DOTALL)
-    score_match = re.search(r'<score>\s*(\d+)\s*</score>', response, re.IGNORECASE)
-    
-    # Default fallbacks in case the LLM hallucinates formatting
-    feedback_text = "Thanks for your answer. Let's move on to the next one."
-    final_score = 0
-    
-    if feedback_match:
-        feedback_text = feedback_match.group(1).strip()
-        
-    if score_match:
-        raw_score = int(score_match.group(1))
-        final_score = min(max(raw_score, 0), max_marks)
+
+    # -- Improved score extraction: try multiple patterns --
+    # Pattern 1: standalone number (e.g., "5" or "10")
+    nums_v1 = re.findall(r"\b(10|[0-9])\b", response)
+    # Pattern 2: "Score: N" format
+    nums_v2 = re.findall(r"Score:\s*(\d+)", response, re.IGNORECASE)
+    # Pattern 3: just the number at the end
+    nums_v3 = re.findall(r"\d+$", response.strip())
+
+    # Collect all found numbers, prioritizing v1 then v2 then v3
+    all_nums = []
+    for nums in [nums_v1, nums_v2, nums_v3]:
+        for n in nums:
+            val = int(n)
+            if 0 <= val <= max_marks:
+                all_nums.append(val)
+
+    # Use the first valid number found, or the highest valid if multiple
+    final_score = None
+    if all_nums:
+        # Use the first valid number (most reliable from model output)
+        final_score = all_nums[0]
     else:
-        final_score = 0
-        feedback_text = (
-            "I couldn't reliably evaluate that answer. "
-            "Let's move to the next question."
-        )
-        
+        # Fallback: try to find any number and clamp it
+        any_nums = re.findall(r"\d+", response)
+        if any_nums:
+            try:
+                final_score = min(max(int(any_nums[0]), 0), max_marks)
+            except ValueError:
+                final_score = 0
+
+    if final_score is None:
+        return 0, "I couldn't reliably evaluate that answer. Let's move to the next question."
+
+    # Clamp final score to valid range
+    final_score = min(max(final_score, 0), max_marks)
+
+    # Generate feedback based on score
+    if final_score >= 8:
+        feedback_text = "Strong answer — it is accurate and covers the key ideas."
+    elif final_score >= 4:
+        feedback_text = "You have part of the idea. Add the important missing details for a stronger answer."
+    else:
+        feedback_text = "This answer needs correction or more direct technical detail."
     return final_score, feedback_text
 
 # =============================================================================

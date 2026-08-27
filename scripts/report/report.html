@@ -139,7 +139,7 @@
   <div class="subtitle">Research Report &nbsp;|&nbsp; Internship Design Project 3 (IDP3)</div>
   <h1>Adaptive LLM Interview System<br>Performance Evaluation</h1>
   <div class="subtitle">Fine-tuned Qwen1.5-1.8B with LoRA &mdash; Scoring Model Analysis</div>
-  <div class="date">Generated: 2026-08-03 &nbsp;&bull;&nbsp; Full Evaluation (Static + Model Inference)</div>
+  <div class="date">Generated: 2026-08-03 &nbsp;&bull;&nbsp; Static Analysis Only</div>
 </div>
 
 <div class="container">
@@ -269,51 +269,11 @@
   <!-- SECTION 2: SCORING EVALUATION -->
   
         <section>
-          <h2>2. Scoring Evaluation — Gold-Standard Benchmark</h2>
-          <p>
-            Model scoring quality was evaluated against a curated set of
-            <strong>30 test cases</strong> across three answer tiers.
-            Each tier was assessed on Mean Absolute Error (MAE) against the tier
-            midpoint and correct-tier classification accuracy.
+          <h2>2. Scoring Evaluation</h2>
+          <p class="note">
+            Scoring evaluation skipped (run without <code>--static-only</code>
+            to generate MAE, tier accuracy, and latency metrics).
           </p>
-          <table>
-            <thead>
-              <tr><th>Tier</th><th>Description</th><th>Expected Range</th>
-                  <th>Mean Assigned Score</th><th>MAE</th><th>Tier Accuracy</th></tr>
-            </thead>
-            <tbody>
-              <tr><td>Perfect (P)</td><td>Accurate, detailed paraphrase</td>
-                  <td>8–10</td><td>7.90</td>
-                  <td>1.10</td><td>90%</td></tr>
-              <tr><td>Partial (M)</td><td>Vague or incomplete answer</td>
-                  <td>4–7</td><td>6.90</td>
-                  <td>1.40</td><td>60%</td></tr>
-              <tr><td>Wrong (W)</td><td>Gibberish, empty, or irrelevant</td>
-                  <td>0–3</td><td>0.80</td>
-                  <td>1.60</td><td>90%</td></tr>
-            </tbody>
-          </table>
-          <div class="metric-grid">
-            <div class="metric-card">
-              <div class="metric-val">1.37</div>
-              <div class="metric-lbl">Overall MAE</div>
-            </div>
-            <div class="metric-card">
-              <div class="metric-val">80.0%</div>
-              <div class="metric-lbl">Tier Classification Accuracy</div>
-            </div>
-            <div class="metric-card">
-              <div class="metric-val">2504 ms</div>
-              <div class="metric-lbl">Median Inference Latency</div>
-            </div>
-            <div class="metric-card">
-              <div class="metric-val">3069 ms</div>
-              <div class="metric-lbl">95th Percentile Latency</div>
-            </div>
-          </div>
-          <figure><img src="fig_score_distribution.png" alt="Score distribution across gold-standard answer tiers"><figcaption>Figure: Score distribution across gold-standard answer tiers</figcaption></figure>
-          <figure><img src="fig_tier_accuracy.png" alt="Confusion matrix for 3-tier answer classification"><figcaption>Figure: Confusion matrix for 3-tier answer classification</figcaption></figure>
-          <figure><img src="fig_latency.png" alt="Inference latency distribution per answer tier"><figcaption>Figure: Inference latency distribution per answer tier</figcaption></figure>
         </section>
         
 

@@ -1,0 +1,11 @@
+{
+  "random_seed": 42,
+  "total_unique_concepts": 4640,
+  "train_concepts": 3703,
+  "val_concepts": 465,
+  "test_concepts": 469,
+  "train_examples": 37030,
+  "val_examples": 2790,
+  "test_examples": 2814,
+  "gold_standard_excluded": 14
+}
