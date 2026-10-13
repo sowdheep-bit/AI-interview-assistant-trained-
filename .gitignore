@@ -4,8 +4,6 @@ __pycache__/
 *.pyc
 *.pyo
 .env
-models/
-*.safetensors
-*.bin
-*.pt
 .DS_Store
+journals/
+main research/
